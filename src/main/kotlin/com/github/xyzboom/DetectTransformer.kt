@@ -73,30 +73,37 @@ class DetectTransformer(properties: Properties) : ClassFileTransformer {
             return
         }
         val visitedVars = hashSetOf<LocalVariableNode>()
-        val startVarMap = hashMapOf<LabelNode, LocalVariableNode>()
-        val endVarMap = hashMapOf<LabelNode, LocalVariableNode>()
+        val startVarMap = hashMapOf<LabelNode, HashSet<LocalVariableNode>>()
+        val endVarMap = hashMapOf<LabelNode, HashSet<LocalVariableNode>>()
         for (localVar in methodNode.localVariables) {
-            startVarMap[localVar.start] = localVar
-            endVarMap[localVar.end] = localVar
+            if (localVar.start !in startVarMap) {
+                startVarMap[localVar.start] = HashSet()
+            }
+            if (localVar.end !in endVarMap) {
+                endVarMap[localVar.end] = HashSet()
+            }
+            startVarMap[localVar.start]!!.add(localVar)
+            endVarMap[localVar.end]!!.add(localVar)
         }
         for (inst in methodNode.instructions) {
             if (inst is LabelNode) {
                 if (inst in startVarMap) {
                     val varNode = startVarMap[inst]!!
-                    visitedVars.add(varNode)
-                } else if (inst in endVarMap) {
+                    visitedVars.addAll(varNode)
+                }
+                if (inst in endVarMap) {
                     val varNode = endVarMap[inst]!!
-                    visitedVars.remove(varNode)
+                    visitedVars.removeAll(varNode)
                 }
             }
             if (inst is LineNumberNode) {
                 val insnList = generateMonitorLocalVar(inst.line, visitedVars)
                 if (inst.next is FrameNode) {
-                    var insertAfter = inst.next
-                    while (insertAfter.next is FrameNode) {
-                        insertAfter = insertAfter.next
+                    var insertBefore = inst.next
+                    while (insertBefore is FrameNode) {
+                        insertBefore = insertBefore.next
                     }
-                    methodNode.instructions.insert(insertAfter, insnList)
+                    methodNode.instructions.insertBefore(insertBefore, insnList)
                 } else if (inst.next is TypeInsnNode && inst.next.opcode == NEW) {
                     methodNode.instructions.insertBefore(inst, insnList)
                 } else {

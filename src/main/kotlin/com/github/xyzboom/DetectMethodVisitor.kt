@@ -8,17 +8,14 @@ class DetectMethodVisitor(mv: MethodVisitor, access: Int, name: String?, desc: S
     AdviceAdapter(ASM9, mv, access, name, desc) {
 
     override fun visitLineNumber(line: Int, start: Label?) {
-        generateMonitorLocalVar()
         super.visitLineNumber(line, start)
+        generateMonitorLocalVar(line)
     }
 
-    private fun generateMonitorLocalVar() {
+    private fun generateMonitorLocalVar(line: Int) {
         if (firstLocal == nextLocal) return
         with(mv) {
-            visitFieldInsn(
-                GETSTATIC, "java/lang/System",
-                "out", "Ljava/io/PrintStream;"
-            )
+            push(line)
             push(nextLocal - firstLocal)
             visitTypeInsn(ANEWARRAY, "java/lang/Object")
             for (i in firstLocal until nextLocal) {
@@ -29,7 +26,7 @@ class DetectMethodVisitor(mv: MethodVisitor, access: Int, name: String?, desc: S
             }
             visitMethodInsn(
                 INVOKESTATIC, "com/github/xyzboom/DetectMonitor",
-                "monitorLocalVar", "([Ljava/lang/Object;)V", false
+                "monitorLocalVar", "(I[Ljava/lang/Object;)V", false
             )
         }
     }

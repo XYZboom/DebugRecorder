@@ -4,7 +4,7 @@ package com.github.xyzboom
 
 object DetectMonitor {
     @JvmStatic
-    fun monitorLocalVar(vararg vars: Any?) {
-        println(vars.contentToString())
+    fun monitorLocalVar(line: Int, vars: HashMap<String, Any?>, boxVars: Array<String>) {
+        println("$line: ${vars}, boxVars: ${boxVars.contentToString()}")
     }
 }

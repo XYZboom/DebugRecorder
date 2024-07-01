@@ -69,7 +69,7 @@ class DetectTransformer(properties: Properties) : ClassFileTransformer {
     }
 
     private fun transformMethod(methodNode: MethodNode) {
-        if (methodNode.name == "<cinit>" || methodNode.name == "<init>") {
+        if (methodNode.name == "<clinit>" || methodNode.name == "<init>") {
             return
         }
         val visitedVars = hashSetOf<LocalVariableNode>()
@@ -118,7 +118,18 @@ class DetectTransformer(properties: Properties) : ClassFileTransformer {
         visitedVars: HashSet<LocalVariableNode>,
     ): InsnList {
         val list = InsnList()
-        list.add(IntInsnNode(BIPUSH, line))
+        when (line) {
+            in -1..5 -> {
+                list.add(InsnNode(ICONST_0 + line))
+            }
+            in Byte.MIN_VALUE..Byte.MAX_VALUE -> {
+                list.add(IntInsnNode(BIPUSH, line))
+            }
+            in Short.MIN_VALUE..Short.MAX_VALUE -> {
+                list.add(IntInsnNode(SIPUSH, line))
+            }
+            else -> list.add(IntInsnNode(LDC, line))
+        }
         list.add(TypeInsnNode(NEW, "java/util/HashMap"))
         list.add(InsnNode(DUP))
         list.add(

@@ -15,12 +15,14 @@ import kotlin.collections.HashSet
 class DetectTransformer(properties: Properties) : ClassFileTransformer {
 
     companion object {
-        val whiteList = listOf(
+        val classNameWhiteList = listOf(
             DetectAgent::class.java,
             DetectClassVisitor::class.java,
             DetectMethodVisitor::class.java,
             DetectMonitor::class.java,
             DetectTransformer::class.java,
+            DetectMonitor.ClassJsonSerializer::class.java,
+            DetectMonitor.AllObjectSerializer::class.java,
         ).map(Type::getInternalName).toHashSet()
     }
 
@@ -36,7 +38,7 @@ class DetectTransformer(properties: Properties) : ClassFileTransformer {
         protectionDomain: ProtectionDomain?,
         classfileBuffer: ByteArray?
     ): ByteArray? {
-        if (className == null || className in whiteList) {
+        if (className == null || className in classNameWhiteList) {
             return null
         }
         val name = className.replace("/", ".")
@@ -70,6 +72,9 @@ class DetectTransformer(properties: Properties) : ClassFileTransformer {
 
     private fun transformMethod(methodNode: MethodNode) {
         if (methodNode.name == "<clinit>" || methodNode.name == "<init>") {
+            return
+        }
+        if (methodNode.localVariables == null) {
             return
         }
         val visitedVars = hashSetOf<LocalVariableNode>()

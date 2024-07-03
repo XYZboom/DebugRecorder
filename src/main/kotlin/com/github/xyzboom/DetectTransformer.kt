@@ -1,5 +1,10 @@
 package com.github.xyzboom
 
+import com.github.xyzboom.utils.boxIfNeed
+import com.github.xyzboom.utils.loadVar
+import com.github.xyzboom.visitors.DetectClassVisitor
+import com.github.xyzboom.visitors.DetectMethodVisitor
+import com.github.xyzboom.visitors.TestCaseRecordVisitor
 import org.objectweb.asm.ClassReader
 import org.objectweb.asm.ClassWriter
 import org.objectweb.asm.Opcodes.*
@@ -67,16 +72,20 @@ class DetectTransformer(properties: Properties) : ClassFileTransformer {
     }
 
     private fun transformClass(classNode: ClassNode) {
-        classNode.methods.forEach(this::transformMethod)
+        for (method in classNode.methods) {
+            transformMethod(method, classNode.name)
+        }
     }
 
-    private fun transformMethod(methodNode: MethodNode) {
+    private fun transformMethod(methodNode: MethodNode, owner: String) {
         if (methodNode.name == "<clinit>" || methodNode.name == "<init>") {
             return
         }
         if (methodNode.localVariables == null) {
             return
         }
+        TestCaseRecordVisitor(owner, methodNode.access, methodNode.name, methodNode.desc, null)
+            .analyze(methodNode.instructions)
         val visitedVars = hashSetOf<LocalVariableNode>()
         val startVarMap = hashMapOf<LabelNode, HashSet<LocalVariableNode>>()
         val endVarMap = hashMapOf<LabelNode, HashSet<LocalVariableNode>>()
@@ -127,12 +136,15 @@ class DetectTransformer(properties: Properties) : ClassFileTransformer {
             in -1..5 -> {
                 list.add(InsnNode(ICONST_0 + line))
             }
+
             in Byte.MIN_VALUE..Byte.MAX_VALUE -> {
                 list.add(IntInsnNode(BIPUSH, line))
             }
+
             in Short.MIN_VALUE..Short.MAX_VALUE -> {
                 list.add(IntInsnNode(SIPUSH, line))
             }
+
             else -> list.add(IntInsnNode(LDC, line))
         }
         list.add(TypeInsnNode(NEW, "java/util/HashMap"))
@@ -171,81 +183,11 @@ class DetectTransformer(properties: Properties) : ClassFileTransformer {
         }
         list.add(
             MethodInsnNode(
-                AdviceAdapter.INVOKESTATIC, "com/github/xyzboom/DetectMonitor",
-                "monitorLocalVar", "(ILjava/util/HashMap;[Ljava/lang/String;)V", false
+                AdviceAdapter.INVOKESTATIC, Type.getInternalName(DetectMonitor::class.java),
+                DetectMonitor::monitorLocalVar.name,
+                "(ILjava/util/HashMap;[Ljava/lang/String;)V", false
             )
         )
         return list
-    }
-
-    private fun loadVar(localVar: LocalVariableNode): VarInsnNode {
-        val code = when (localVar.desc) {
-            Type.INT_TYPE.descriptor, Type.SHORT_TYPE.descriptor,
-            Type.BOOLEAN_TYPE.descriptor, Type.CHAR_TYPE.descriptor,
-            Type.BYTE_TYPE.descriptor -> ILOAD
-
-            Type.LONG_TYPE.descriptor -> LLOAD
-
-            Type.DOUBLE_TYPE.descriptor -> DLOAD
-
-            Type.FLOAT_TYPE.descriptor -> FLOAD
-            else -> ALOAD
-        }
-        return VarInsnNode(code, localVar.index)
-    }
-
-    private fun boxIfNeed(desc: String): MethodInsnNode? {
-        return when (desc) {
-            Type.INT_TYPE.descriptor ->
-                MethodInsnNode(
-                    INVOKESTATIC, "java/lang/Integer",
-                    "valueOf", "(I)Ljava/lang/Integer;", false
-                )
-
-            Type.BOOLEAN_TYPE.descriptor ->
-                MethodInsnNode(
-                    INVOKESTATIC, "java/lang/Boolean",
-                    "valueOf", "(Z)Ljava/lang/Boolean;", false
-                )
-
-            Type.LONG_TYPE.descriptor ->
-                MethodInsnNode(
-                    INVOKESTATIC, "java/lang/Long",
-                    "valueOf", "(J)Ljava/lang/Long;", false
-                )
-
-            Type.DOUBLE_TYPE.descriptor ->
-                MethodInsnNode(
-                    INVOKESTATIC, "java/lang/Double",
-                    "valueOf", "(D)Ljava/lang/Double;", false
-                )
-
-            Type.FLOAT_TYPE.descriptor ->
-                MethodInsnNode(
-                    INVOKESTATIC, "java/lang/Float",
-                    "valueOf", "(F)Ljava/lang/Float;", false
-                )
-
-            Type.SHORT_TYPE.descriptor ->
-                MethodInsnNode(
-                    INVOKESTATIC, "java/lang/Short",
-                    "valueOf", "(S)Ljava/lang/Short;", false
-                )
-
-            Type.CHAR_TYPE.descriptor ->
-                MethodInsnNode(
-                    INVOKESTATIC, "java/lang/Character",
-                    "valueOf", "(C)Ljava/lang/Character;", false
-                )
-
-            Type.BYTE_TYPE.descriptor ->
-                MethodInsnNode(
-                    INVOKESTATIC, "java/lang/Byte",
-                    "valueOf", "(B)Ljava/lang/Byte;", false
-                )
-
-
-            else -> null
-        }
     }
 }

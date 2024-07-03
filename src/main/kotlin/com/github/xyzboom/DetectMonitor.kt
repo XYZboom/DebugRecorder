@@ -55,4 +55,15 @@ object DetectMonitor {
         val varsStr = gson.toJson(vars)
         println("$className:$methodName:$line\n ${varsStr}, boxVars: ${boxVars.contentToString()}")
     }
+
+    @JvmStatic
+    fun monitorTestCase(expected: Any?) {
+        val expectedStr = gson.toJson(expected)
+        val expectedClassStr = if (expected != null) {
+            expected::class.java
+        } else {
+            null
+        }
+        println("expected: {$expectedStr} of type: {$expectedClassStr}")
+    }
 }

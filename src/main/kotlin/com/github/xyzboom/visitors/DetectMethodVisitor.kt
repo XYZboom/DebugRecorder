@@ -1,4 +1,4 @@
-package com.github.xyzboom
+package com.github.xyzboom.visitors
 
 import org.objectweb.asm.Label
 import org.objectweb.asm.MethodVisitor

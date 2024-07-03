@@ -53,7 +53,8 @@ object DetectMonitor {
         val className = stack[2].className
         val methodName = stack[2].methodName
         val varsStr = gson.toJson(vars)
-        println("$className:$methodName:$line\n ${varsStr}, boxVars: ${boxVars.contentToString()}")
+        println("$className:$methodName:$line\n" +
+                "${varsStr}, boxVars: ${boxVars.contentToString()}")
     }
 
     @JvmStatic
@@ -64,6 +65,21 @@ object DetectMonitor {
         } else {
             null
         }
-        println("expected: {$expectedStr} of type: {$expectedClassStr}")
+        val stack = Thread.currentThread().stackTrace
+        val className = stack[2].className
+        val methodName = stack[2].methodName
+        val line = stack[2].lineNumber
+        println("$className:$methodName:$line\n" +
+                "expected: {$expectedStr} of type: {$expectedClassStr}")
+    }
+
+    @JvmStatic
+    fun monitorUnsupportedTestCase() {
+        val stack = Thread.currentThread().stackTrace
+        val className = stack[2].className
+        val methodName = stack[2].methodName
+        val line = stack[2].lineNumber
+        println("$className:$methodName:$line\n" +
+                "unsupported test case.")
     }
 }

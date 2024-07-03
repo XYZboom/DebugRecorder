@@ -25,6 +25,7 @@ class TestCaseRecordVisitor(
             "(Ljava/lang/String;Ljava/lang/Object;Ljava/lang/Object;)V"
         )
     }
+
     var currentInsnNode: AbstractInsnNode? = null
     val stackChangedNodes = ArrayList<Pair<Int, AbstractInsnNode>>()
 
@@ -43,11 +44,19 @@ class TestCaseRecordVisitor(
             stackChanged = false
             stackChangedSize = 0
             if (node is MethodInsnNode) {
-                if (node.owner == "org/junit/Assert" && node.name == "assertEquals"
-                    && node.desc in assertEqualsObjectsDescriptor
-                ) {
-                    val (monitorInsnList, insertNode) = generateMonitorTestCase() ?: continue
-                    insnList.insertBefore(insertNode, monitorInsnList)
+                if (node.name == "assertEquals") {
+                    if (node.desc in assertEqualsObjectsDescriptor) {
+                        try {
+                            val (monitorInsnList, insertNode) = generateMonitorTestCase() ?: continue
+                            insnList.insertBefore(insertNode, monitorInsnList)
+                        } catch (e: Throwable) {
+                            val unsupportedTestCaseList = generateUnsupportedTestCase()
+                            insnList.insertBefore(node, unsupportedTestCaseList)
+                        }
+                    }
+                } else if ("assert" in node.name) {
+                    val unsupportedTestCaseList = generateUnsupportedTestCase()
+                    insnList.insertBefore(node, unsupportedTestCaseList)
                 }
             }
             node.accept(this)
@@ -55,6 +64,20 @@ class TestCaseRecordVisitor(
                 stackChangedNodes += stackChangedSize to node
             }
         }
+    }
+
+    private fun generateUnsupportedTestCase(): InsnList {
+        val unsupportedTestCaseList = InsnList()
+        with(unsupportedTestCaseList) {
+            add(
+                MethodInsnNode(
+                    INVOKESTATIC, Type.getInternalName(DetectMonitor::class.java),
+                    DetectMonitor::monitorUnsupportedTestCase.name,
+                    "()V", false
+                )
+            )
+        }
+        return unsupportedTestCaseList
     }
 
     override fun pop(numSlots: Int) {

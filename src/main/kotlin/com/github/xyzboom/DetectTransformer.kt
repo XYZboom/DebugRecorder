@@ -73,7 +73,11 @@ class DetectTransformer(properties: Properties) : ClassFileTransformer {
 
     private fun transformClass(classNode: ClassNode) {
         for (method in classNode.methods) {
-            transformMethod(method, classNode.name)
+            try {
+                transformMethod(method, classNode.name)
+            } catch (e: Throwable) {
+                e.printStackTrace()
+            }
         }
     }
 
@@ -84,8 +88,12 @@ class DetectTransformer(properties: Properties) : ClassFileTransformer {
         if (methodNode.localVariables == null) {
             return
         }
-        TestCaseRecordVisitor(owner, methodNode.access, methodNode.name, methodNode.desc, null)
-            .analyze(methodNode.instructions)
+        try {
+            TestCaseRecordVisitor(owner, methodNode.access, methodNode.name, methodNode.desc, null)
+                .analyze(methodNode.instructions)
+        } catch (e: Throwable) {
+            e.printStackTrace()
+        }
         val visitedVars = hashSetOf<LocalVariableNode>()
         val startVarMap = hashMapOf<LabelNode, HashSet<LocalVariableNode>>()
         val endVarMap = hashMapOf<LabelNode, HashSet<LocalVariableNode>>()

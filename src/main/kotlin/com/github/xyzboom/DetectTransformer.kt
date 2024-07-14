@@ -5,6 +5,7 @@ import com.github.xyzboom.utils.loadVar
 import com.github.xyzboom.visitors.DetectClassVisitor
 import com.github.xyzboom.visitors.DetectMethodVisitor
 import com.github.xyzboom.visitors.TestCaseRecordVisitor
+import io.github.oshai.kotlinlogging.KotlinLogging
 import org.objectweb.asm.ClassReader
 import org.objectweb.asm.ClassWriter
 import org.objectweb.asm.Opcodes.*
@@ -17,9 +18,22 @@ import java.util.*
 import kotlin.collections.HashSet
 
 
-class DetectTransformer(properties: Properties) : ClassFileTransformer {
+class DetectTransformer(
+    classes: Set<String>,
+    methods: Set<String>
+) : ClassFileTransformer {
+
+    private val classes: HashSet<String> = HashSet()
+
+    init {
+        this.classes.addAll(classes)
+        for (methodName in methods) {
+            this.classes.add(methodName.split("::")[0])
+        }
+    }
 
     companion object {
+        private val logger = KotlinLogging.logger {}
         val classNameWhiteList = listOf(
             DetectAgent::class.java,
             DetectClassVisitor::class.java,
@@ -31,10 +45,6 @@ class DetectTransformer(properties: Properties) : ClassFileTransformer {
         ).map(Type::getInternalName).toHashSet()
     }
 
-    private val packageName: String = (properties["package"] ?: "").toString()
-    private val classes: Set<String> =
-        properties["classes"]?.toString()?.split(";")?.toSet()
-            ?: emptySet()
 
     override fun transform(
         loader: ClassLoader?,
@@ -43,19 +53,19 @@ class DetectTransformer(properties: Properties) : ClassFileTransformer {
         protectionDomain: ProtectionDomain?,
         classfileBuffer: ByteArray?
     ): ByteArray? {
+        val classLoader = loader ?: ClassLoader.getSystemClassLoader()
         if (className == null || className in classNameWhiteList) {
             return null
         }
         val name = className.replace("/", ".")
-        if (!name.startsWith(packageName)) {
-            return null
-        }
-        if (classes.isNotEmpty() && name.removePrefix("${packageName}.") !in classes) {
+        if (classes.isNotEmpty() && name !in classes) {
             return null
         }
         println("Transforming class: $className")
         try {
-            val classReader = ClassReader(className)
+            val classReader = ClassReader(
+                classLoader.getResourceAsStream(className.replace(".", "/") + ".class")
+            )
             val classWriter = ClassWriter(ClassWriter.COMPUTE_MAXS)
 //            val classVisitor = DetectClassVisitor(classWriter)
 //            classReader.accept(classVisitor, ClassReader.EXPAND_FRAMES)
@@ -66,7 +76,7 @@ class DetectTransformer(properties: Properties) : ClassFileTransformer {
             classNode.accept(classWriter)
             return classWriter.toByteArray()
         } catch (e: Exception) {
-            e.printStackTrace()
+            logger.error { e.stackTraceToString() }
         }
         return classfileBuffer
     }
@@ -89,8 +99,8 @@ class DetectTransformer(properties: Properties) : ClassFileTransformer {
             return
         }
         try {
-            TestCaseRecordVisitor(owner, methodNode.access, methodNode.name, methodNode.desc, null)
-                .analyze(methodNode.instructions)
+//            TestCaseRecordVisitor(owner, methodNode.access, methodNode.name, methodNode.desc, null)
+//                .analyze(methodNode.instructions)
         } catch (e: Throwable) {
             e.printStackTrace()
         }

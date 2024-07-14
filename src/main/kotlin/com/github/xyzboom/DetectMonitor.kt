@@ -3,10 +3,14 @@
 package com.github.xyzboom
 
 import com.google.gson.*
+import io.github.oshai.kotlinlogging.KotlinLogging
 import java.lang.reflect.Type
 
 
 object DetectMonitor {
+
+    private val logger = KotlinLogging.logger {}
+
     internal object ClassJsonSerializer : JsonSerializer<Class<*>?> {
         override fun serialize(p0: Class<*>?, p1: Type?, p2: JsonSerializationContext?): JsonElement {
             return JsonPrimitive(p0.toString())
@@ -53,8 +57,10 @@ object DetectMonitor {
         val className = stack[2].className
         val methodName = stack[2].methodName
         val varsStr = gson.toJson(vars)
-        println("$className:$methodName:$line\n" +
-                "${varsStr}, boxVars: ${boxVars.contentToString()}")
+        logger.info {
+            "$className:$methodName:$line\n" +
+                    "${varsStr}, boxVars: ${boxVars.contentToString()}"
+        }
     }
 
     @JvmStatic
@@ -69,8 +75,10 @@ object DetectMonitor {
         val className = stack[2].className
         val methodName = stack[2].methodName
         val line = stack[2].lineNumber
-        println("$className:$methodName:$line\n" +
-                "expected: {$expectedStr} of type: {$expectedClassStr}")
+        println(
+            "$className:$methodName:$line\n" +
+                    "expected: {$expectedStr} of type: {$expectedClassStr}"
+        )
     }
 
     @JvmStatic
@@ -79,7 +87,9 @@ object DetectMonitor {
         val className = stack[2].className
         val methodName = stack[2].methodName
         val line = stack[2].lineNumber
-        println("$className:$methodName:$line\n" +
-                "unsupported test case.")
+        println(
+            "$className:$methodName:$line\n" +
+                    "unsupported test case."
+        )
     }
 }

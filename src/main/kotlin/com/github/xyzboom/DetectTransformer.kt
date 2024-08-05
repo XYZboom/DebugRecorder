@@ -214,14 +214,12 @@ class DetectTransformer(
                 "<init>", "()V", false
             )
         )
-        val boxVars = hashSetOf<String>()
         for (localVar in visitedVars) {
             list.add(InsnNode(DUP))
             list.add(LdcInsnNode(localVar.name))
             list.add(loadVar(localVar))
             val boxIfNeed = boxIfNeed(localVar.desc)
             if (boxIfNeed != null) {
-                boxVars.add(localVar.name)
                 list.add(boxIfNeed)
             }
             list.add(
@@ -232,19 +230,11 @@ class DetectTransformer(
             )
             list.add(InsnNode(POP))
         }
-        list.add(IntInsnNode(BIPUSH, boxVars.size))
-        list.add(TypeInsnNode(ANEWARRAY, "java/lang/String"))
-        for ((index, boxVarName) in boxVars.withIndex()) {
-            list.add(InsnNode(DUP))
-            list.add(IntInsnNode(BIPUSH, index))
-            list.add(LdcInsnNode(boxVarName))
-            list.add(InsnNode(AASTORE))
-        }
         list.add(
             MethodInsnNode(
                 AdviceAdapter.INVOKESTATIC, Type.getInternalName(DetectMonitor::class.java),
                 DetectMonitor::monitorLocalVar.name,
-                "(ILjava/util/HashMap;[Ljava/lang/String;)V", false
+                "(ILjava/util/HashMap;)V", false
             )
         )
         return list

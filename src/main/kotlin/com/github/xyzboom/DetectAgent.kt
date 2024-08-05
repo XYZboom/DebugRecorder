@@ -12,6 +12,7 @@ object DetectAgent {
     private const val D4J_CLASSES_RELEVANT_KEY = "d4j.classes.relevant"
     private const val D4J_TEST_TRIGGER_KEY = "d4j.tests.trigger"
     private const val NORMAL_CLASSES_KEY = "classes"
+    private const val ARGS_D4J_EXCLUDE_TEST_KEY = "args.d4j.exclude.test"
     private val logger = KotlinLogging.logger {}
 
     /**
@@ -22,7 +23,6 @@ object DetectAgent {
      */
     @JvmStatic
     fun premain(agentArgs: String?, instrumentation: Instrumentation) {
-        logger.info { "premain detect" }
         val command = System.getProperty("sun.java.command")
         if (command != null && "defects4j.build.xml" in command
             && !command.endsWith("run.dev.tests")
@@ -54,7 +54,11 @@ object DetectAgent {
             }
         val classes = (properties.getProperty(D4J_CLASSES_RELEVANT_KEY) ?:
                 args.getProperty(NORMAL_CLASSES_KEY)).split(",").toSet()
-        val triggerTest = (properties.getProperty(D4J_TEST_TRIGGER_KEY) ?: "").split(",").toSet()
+        val triggerTest = if (args.getProperty(ARGS_D4J_EXCLUDE_TEST_KEY, "true").toBoolean()) {
+            emptySet()
+        } else {
+            (properties.getProperty(D4J_TEST_TRIGGER_KEY) ?: "").split(",").toSet()
+        }
         instrumentation.addTransformer(DetectTransformer(classes, triggerTest, args), true)
     }
 }

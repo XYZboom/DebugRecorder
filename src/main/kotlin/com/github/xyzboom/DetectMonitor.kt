@@ -42,7 +42,7 @@ object DetectMonitor {
         .create()
 
     @JvmStatic
-    fun monitorLocalVar(line: Int, vars: HashMap<String, Any?>, boxVars: Array<String>) {
+    fun monitorLocalVar(line: Int, vars: HashMap<String, Any?>) {
         val stack = Thread.currentThread().stackTrace
         var monitorInStack = false
         for (i in stack) {
@@ -58,8 +58,7 @@ object DetectMonitor {
         val methodName = stack[2].methodName
         val varsStr = gson.toJson(vars)
         logger.info {
-            "$className:$methodName:$line\n" +
-                    "${varsStr}, boxVars: ${boxVars.contentToString()}"
+            "$className:$methodName:$line\n${varsStr}"
         }
     }
 

@@ -11,6 +11,7 @@ object DetectAgent {
     private const val D4J_FILE = "defects4j.build.properties"
     private const val D4J_CLASSES_RELEVANT_KEY = "d4j.classes.relevant"
     private const val D4J_TEST_TRIGGER_KEY = "d4j.tests.trigger"
+    private const val NORMAL_CLASSES_KEY = "classes"
     private val logger = KotlinLogging.logger {}
 
     /**
@@ -37,8 +38,23 @@ object DetectAgent {
             logger.error { e.stackTraceToString() }
             logger.info { "Error when reading file: $D4J_FILE! Skip." }
         }
-        val classes = properties.getProperty(D4J_CLASSES_RELEVANT_KEY).split(",").toSet()
-        val triggerTest = properties.getProperty(D4J_TEST_TRIGGER_KEY).split(",").toSet()
-        instrumentation.addTransformer(DetectTransformer(classes, triggerTest), true)
+        val args: Properties =
+            try {
+                if (agentArgs != null) {
+                    Properties().apply {
+                        load(File(agentArgs).reader())
+                    }
+                } else {
+                    Properties()
+                }
+            } catch (e: IOException) {
+                logger.error { e.stackTraceToString() }
+                logger.info { "Error when reading file: $agentArgs! Skip." }
+                Properties()
+            }
+        val classes = (properties.getProperty(D4J_CLASSES_RELEVANT_KEY) ?:
+                args.getProperty(NORMAL_CLASSES_KEY)).split(",").toSet()
+        val triggerTest = (properties.getProperty(D4J_TEST_TRIGGER_KEY) ?: "").split(",").toSet()
+        instrumentation.addTransformer(DetectTransformer(classes, triggerTest, args), true)
     }
 }

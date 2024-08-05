@@ -1,10 +1,10 @@
 package com.github.xyzboom
 
 import com.github.xyzboom.utils.boxIfNeed
+import com.github.xyzboom.utils.isWriteLocalVar
 import com.github.xyzboom.utils.loadVar
 import com.github.xyzboom.visitors.DetectClassVisitor
 import com.github.xyzboom.visitors.DetectMethodVisitor
-import com.github.xyzboom.visitors.TestCaseRecordVisitor
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.objectweb.asm.ClassReader
 import org.objectweb.asm.ClassWriter
@@ -15,15 +15,22 @@ import org.objectweb.asm.tree.*
 import java.lang.instrument.ClassFileTransformer
 import java.security.ProtectionDomain
 import java.util.*
+import kotlin.collections.HashMap
 import kotlin.collections.HashSet
 
 
 class DetectTransformer(
     classes: Set<String>,
-    methods: Set<String>
+    methods: Set<String>,
+    args: Properties
 ) : ClassFileTransformer {
 
     private val classes: HashSet<String> = HashSet()
+
+    /** Monitor only changed variables or not.
+     * Note that all variables will be monitored when they come out for the first time.
+     */
+    private val changedLocalVarsOnly = args.getProperty(KEY_CHANGED_LOCAL_VARS_ONLY, "true").toBoolean()
 
     init {
         this.classes.addAll(classes)
@@ -34,6 +41,7 @@ class DetectTransformer(
 
     companion object {
         private val logger = KotlinLogging.logger {}
+        private const val KEY_CHANGED_LOCAL_VARS_ONLY = "changedLocalVarsOnly"
         val classNameWhiteList = listOf(
             DetectAgent::class.java,
             DetectClassVisitor::class.java,
@@ -104,32 +112,59 @@ class DetectTransformer(
         } catch (e: Throwable) {
             e.printStackTrace()
         }
-        val visitedVars = hashSetOf<LocalVariableNode>()
-        val startVarMap = hashMapOf<LabelNode, HashSet<LocalVariableNode>>()
-        val endVarMap = hashMapOf<LabelNode, HashSet<LocalVariableNode>>()
+        val notFirstTimeVars = hashSetOf<LocalVariableNode>()
+        val availableVars = hashMapOf<Int, LocalVariableNode>()
+        val wroteOrFirstVisitVars = hashSetOf<LocalVariableNode>()
+        val startVarMap = hashMapOf<LabelNode, HashMap<Int, LocalVariableNode>>()
+        val endVarMap = hashMapOf<LabelNode, HashMap<Int, LocalVariableNode>>()
         for (localVar in methodNode.localVariables) {
             if (localVar.start !in startVarMap) {
-                startVarMap[localVar.start] = HashSet()
+                startVarMap[localVar.start] = HashMap()
             }
             if (localVar.end !in endVarMap) {
-                endVarMap[localVar.end] = HashSet()
+                endVarMap[localVar.end] = HashMap()
             }
-            startVarMap[localVar.start]!!.add(localVar)
-            endVarMap[localVar.end]!!.add(localVar)
+            startVarMap[localVar.start]!![localVar.index] = localVar
+            endVarMap[localVar.end]!![localVar.index] = localVar
         }
         for (inst in methodNode.instructions) {
             if (inst is LabelNode) {
                 if (inst in startVarMap) {
-                    val varNode = startVarMap[inst]!!
-                    visitedVars.addAll(varNode)
+                    val varNodes = startVarMap[inst]!!
+                    availableVars.putAll(varNodes)
                 }
                 if (inst in endVarMap) {
-                    val varNode = endVarMap[inst]!!
-                    visitedVars.removeAll(varNode)
+                    val varNodes = endVarMap[inst]!!
+                    for ((index, _) in varNodes) {
+                        availableVars.remove(index)
+                    }
+                }
+            }
+            if (changedLocalVarsOnly) {
+                if (inst is VarInsnNode) {
+                    if (availableVars.containsKey(inst.`var`)) {
+                        val localVar = availableVars[inst.`var`]!!
+                        if (inst.isWriteLocalVar()) {
+                            wroteOrFirstVisitVars.add(localVar)
+                        }
+                    }
                 }
             }
             if (inst is LineNumberNode) {
-                val insnList = generateMonitorLocalVar(inst.line, visitedVars)
+                if (availableVars.isEmpty()) {
+                    continue
+                }
+                val insnList = if (changedLocalVarsOnly) {
+                    for ((_, varNode) in availableVars) {
+                        if (varNode !in notFirstTimeVars) {
+                            notFirstTimeVars.add(varNode)
+                            wroteOrFirstVisitVars.add(varNode)
+                        }
+                    }
+                    generateMonitorLocalVar(inst.line, wroteOrFirstVisitVars)
+                } else {
+                    generateMonitorLocalVar(inst.line, availableVars.values)
+                }
                 if (inst.next is FrameNode) {
                     var insertBefore = inst.next
                     while (insertBefore is FrameNode) {
@@ -141,15 +176,21 @@ class DetectTransformer(
                 } else {
                     methodNode.instructions.insert(inst, insnList)
                 }
+                if (changedLocalVarsOnly) {
+                    wroteOrFirstVisitVars.clear()
+                }
             }
         }
     }
 
     private fun generateMonitorLocalVar(
         line: Int,
-        visitedVars: HashSet<LocalVariableNode>,
+        visitedVars: Collection<LocalVariableNode>,
     ): InsnList {
         val list = InsnList()
+        if (visitedVars.isEmpty()) {
+            return list
+        }
         when (line) {
             in -1..5 -> {
                 list.add(InsnNode(ICONST_0 + line))

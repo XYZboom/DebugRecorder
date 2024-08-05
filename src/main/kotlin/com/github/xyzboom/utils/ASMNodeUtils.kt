@@ -75,3 +75,18 @@ fun loadVar(localVar: LocalVariableNode): VarInsnNode {
     }
     return VarInsnNode(code, localVar.index)
 }
+
+fun VarInsnNode.isWriteLocalVar(): Boolean {
+    return when (opcode) {
+        Opcodes.ISTORE,
+        Opcodes.LSTORE,
+        Opcodes.FSTORE,
+        Opcodes.DSTORE,
+        Opcodes.ASTORE -> {
+            // 检查操作数是否是一个局部变量的索引
+            `var` >= 0
+        }
+
+        else -> false
+    }
+}

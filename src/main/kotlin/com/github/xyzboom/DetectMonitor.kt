@@ -43,6 +43,9 @@ object DetectMonitor {
 
     @JvmStatic
     fun monitorLocalVar(line: Int, vars: HashMap<String, Any?>) {
+        if (vars.isEmpty()) {
+            return
+        }
         val stack = Thread.currentThread().stackTrace
         var monitorInStack = false
         for (i in stack) {

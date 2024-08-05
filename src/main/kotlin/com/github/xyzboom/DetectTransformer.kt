@@ -1,5 +1,6 @@
 package com.github.xyzboom
 
+import com.github.xyzboom.DetectAgent.D4J_FILE
 import com.github.xyzboom.utils.boxIfNeed
 import com.github.xyzboom.utils.isWriteLocalVar
 import com.github.xyzboom.utils.loadVar
@@ -21,11 +22,15 @@ import kotlin.collections.HashSet
 
 class DetectTransformer(
     classes: Set<String>,
+    /**
+     * methods here only used by transform d4j test classes
+     */
     methods: Set<String>,
     args: Properties
 ) : ClassFileTransformer {
 
     private val classes: HashSet<String> = HashSet()
+    private val methods: HashSet<String> = HashSet()
 
     /** Monitor only changed variables or not.
      * Note that all variables will be monitored when they come out for the first time.
@@ -33,15 +38,36 @@ class DetectTransformer(
     private val changedLocalVarsOnly = args.getProperty(KEY_CHANGED_LOCAL_VARS_ONLY, "true").toBoolean()
 
     init {
-        this.classes.addAll(classes)
-        for (methodName in methods) {
-            this.classes.add(methodName.split("::")[0])
+        if (!args.getProperty(KEY_ARGS_USE_SPECIFIED).toBoolean()) {
+            this.classes.addAll(classes)
+            for (methodName in methods) {
+                this.classes.add(methodName.split("::")[0])
+            }
+        } else {
+            val specifiedMethods = args.getProperty(KEY_ARGS_METHODS, "").split(",")
+            this.methods.addAll(specifiedMethods)
+            val specifiedClasses = args.getProperty(KEY_ARGS_CLASSES, "").split(",")
+            this.classes.addAll(specifiedClasses)
+            for (methodName in methods) {
+                this.classes.add(methodName.split("::")[0])
+            }
+            this.classes.remove("")
+            this.methods.remove("")
         }
+        // hard code to avoid print exception classes
+        this.classes.removeIf { "Exception" in it }
     }
 
     companion object {
         private val logger = KotlinLogging.logger {}
         private const val KEY_CHANGED_LOCAL_VARS_ONLY = "changedLocalVarsOnly"
+
+        /**
+         * Use specified but not classes in [D4J_FILE]
+         */
+        private const val KEY_ARGS_USE_SPECIFIED = "args.use.specified"
+        private const val KEY_ARGS_CLASSES = "args.classes"
+        private const val KEY_ARGS_METHODS = "args.methods"
         val classNameWhiteList = listOf(
             DetectAgent::class.java,
             DetectClassVisitor::class.java,
@@ -100,6 +126,10 @@ class DetectTransformer(
     }
 
     private fun transformMethod(methodNode: MethodNode, owner: String) {
+        if (methods.isNotEmpty() &&
+            "${owner.replace("/", ".")}::${methodNode.name}" !in methods) {
+            return
+        }
         if (methodNode.name == "<clinit>" || methodNode.name == "<init>") {
             return
         }
@@ -188,7 +218,7 @@ class DetectTransformer(
         visitedVars: Collection<LocalVariableNode>,
     ): InsnList {
         val list = InsnList()
-        if (visitedVars.isEmpty()) {
+        if (visitedVars.isEmpty() || visitedVars.all { it.name == "this" }) {
             return list
         }
         when (line) {
@@ -215,6 +245,9 @@ class DetectTransformer(
             )
         )
         for (localVar in visitedVars) {
+            if (localVar.name == "this") {
+                continue
+            }
             list.add(InsnNode(DUP))
             list.add(LdcInsnNode(localVar.name))
             list.add(loadVar(localVar))

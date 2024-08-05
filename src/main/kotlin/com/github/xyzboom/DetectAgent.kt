@@ -8,7 +8,7 @@ import java.util.Properties
 
 @Suppress("unused")
 object DetectAgent {
-    private const val D4J_FILE = "defects4j.build.properties"
+    internal const val D4J_FILE = "defects4j.build.properties"
     private const val D4J_CLASSES_RELEVANT_KEY = "d4j.classes.relevant"
     private const val D4J_TEST_TRIGGER_KEY = "d4j.tests.trigger"
     private const val NORMAL_CLASSES_KEY = "classes"
@@ -53,7 +53,7 @@ object DetectAgent {
                 Properties()
             }
         val classes = (properties.getProperty(D4J_CLASSES_RELEVANT_KEY) ?:
-                args.getProperty(NORMAL_CLASSES_KEY)).split(",").toSet()
+                args.getProperty(NORMAL_CLASSES_KEY) ?: "").split(",").toSet()
         val triggerTest = if (args.getProperty(ARGS_D4J_EXCLUDE_TEST_KEY, "true").toBoolean()) {
             emptySet()
         } else {

@@ -48,7 +48,7 @@ class DetectTransformer(
             this.methods.addAll(specifiedMethods)
             val specifiedClasses = args.getProperty(KEY_ARGS_CLASSES, "").split(",")
             this.classes.addAll(specifiedClasses)
-            for (methodName in methods) {
+            for (methodName in specifiedMethods) {
                 this.classes.add(methodName.split("::")[0])
             }
             this.classes.remove("")

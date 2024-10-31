@@ -35,7 +35,7 @@ class DetectTransformer(
     /** Monitor only changed variables or not.
      * Note that all variables will be monitored when they come out for the first time.
      */
-    private val changedLocalVarsOnly = args.getProperty(KEY_CHANGED_LOCAL_VARS_ONLY, "true").toBoolean()
+    private val changedLocalVarsOnly = args.getProperty(KEY_CHANGED_LOCAL_VARS_ONLY, "false").toBoolean()
 
     init {
         if (!args.getProperty(KEY_ARGS_USE_SPECIFIED).toBoolean()) {
@@ -51,9 +51,26 @@ class DetectTransformer(
             for (methodName in specifiedMethods) {
                 this.classes.add(methodName.split("::")[0])
             }
+            val addingMethods = HashSet<String>()
+            for (method in this.methods) {
+                if (method.isEmpty()) continue
+                val clazzAndMethodName = method.split("::")
+                val clazzName = clazzAndMethodName[0]
+                val methodName = clazzAndMethodName[1]
+                if (clazzName.endsWith(methodName)) {
+                    addingMethods.add("${clazzName}::<init>")
+                }
+            }
+            this.methods.addAll(addingMethods)
             this.classes.remove("")
             this.methods.remove("")
+            if (this.classes.isEmpty() && this.methods.isEmpty()) {
+                // when baseline location is not available, use relevant ones.
+                this.classes.addAll(classes)
+            }
         }
+        this.classes.remove("")
+        this.methods.remove("")
         // hard code to avoid print exception classes
         this.classes.removeIf { "Exception" in it }
     }
@@ -74,6 +91,7 @@ class DetectTransformer(
             DetectMethodVisitor::class.java,
             DetectMonitor::class.java,
             DetectTransformer::class.java,
+            Companion::class.java,
             DetectMonitor.ClassJsonSerializer::class.java,
             DetectMonitor.AllObjectSerializer::class.java,
         ).map(Type::getInternalName).toHashSet()
@@ -130,7 +148,7 @@ class DetectTransformer(
             "${owner.replace("/", ".")}::${methodNode.name}" !in methods) {
             return
         }
-        if (methodNode.name == "<clinit>" || methodNode.name == "<init>") {
+        if (methodNode.name == "<clinit>") {
             return
         }
         if (methodNode.localVariables == null) {
@@ -211,6 +229,26 @@ class DetectTransformer(
                 }
             }
         }
+
+        insertEnterMonitor(owner, methodNode)
+    }
+
+    private fun insertEnterMonitor(owner: String, methodNode: MethodNode) {
+        val methodName = "${owner.replace("/", ".")}::${methodNode.name}"
+        val printNameInsnList = InsnList().apply {
+            add(LdcInsnNode(methodName))
+            add(
+                MethodInsnNode(
+                    INVOKESTATIC,
+                    Type.getInternalName(DetectMonitor::class.java),
+                    DetectMonitor::monitorEnterMethod.name,
+                    "(Ljava/lang/String;)V"
+                )
+            )
+        }
+        methodNode.instructions.first?.apply {
+            methodNode.instructions.insertBefore(this, printNameInsnList)
+        } ?: methodNode.instructions.insert(printNameInsnList)
     }
 
     private fun generateMonitorLocalVar(

@@ -2,14 +2,17 @@
 
 package com.github.xyzboom
 
+import com.github.xyzboom.logger.ori.OriDebugLoggerHelper
+import com.github.xyzboom.logger.small.SmallDebugLoggerHelper
 import com.google.gson.*
-import io.github.oshai.kotlinlogging.KotlinLogging
 import java.lang.reflect.Type
 
 
 object DetectMonitor {
 
-    private val logger = KotlinLogging.logger {}
+    private const val VAR_JSON_MAX_LENGTH = 512
+    private const val VAR_JSON_MAX_BRACE = 128
+    private val notChangedVarRecorder = HashMap<String, HashMap<String, String>>()
 
     internal object ClassJsonSerializer : JsonSerializer<Class<*>?> {
         override fun serialize(p0: Class<*>?, p1: Type?, p2: JsonSerializationContext?): JsonElement {
@@ -42,6 +45,12 @@ object DetectMonitor {
         .create()
 
     @JvmStatic
+    fun monitorEnterMethod(name: String) {
+        // clear local variables when enter a method
+        notChangedVarRecorder[name] = HashMap()
+    }
+
+    @JvmStatic
     fun monitorLocalVar(line: Int, vars: HashMap<String, Any?>) {
         if (vars.isEmpty()) {
             return
@@ -59,8 +68,33 @@ object DetectMonitor {
         }
         val className = stack[2].className
         val methodName = stack[2].methodName
-        val varsStr = gson.toJson(vars)
-        logger.info {
+        val methodFullName = "$className::$methodName"
+        val oriStr = gson.toJson(vars)
+        if (oriStr != "{}") {
+            OriDebugLoggerHelper.logger.info {
+                "$className:$methodName:$line\n${oriStr}"
+            }
+        }
+        if (!notChangedVarRecorder.containsKey(methodFullName)) {
+            notChangedVarRecorder[methodFullName] = HashMap()
+        }
+        val methodRecord = notChangedVarRecorder[methodFullName]!!
+        val strMap = hashMapOf<String, Any?>()
+        for ((str, value) in vars) {
+            val valueStr = gson.toJson(value)
+            if (valueStr.length > VAR_JSON_MAX_LENGTH || valueStr.count { it == '{' } > VAR_JSON_MAX_BRACE) {
+                continue
+            }
+            if (methodRecord[str] == valueStr) {
+                continue
+            }
+            strMap[str] = value
+            methodRecord[str] = valueStr
+        }
+        if (strMap.isEmpty()) return
+        val varsStr = gson.toJson(strMap)
+        if (varsStr == "{}") return
+        SmallDebugLoggerHelper.logger.info {
             "$className:$methodName:$line\n${varsStr}"
         }
     }

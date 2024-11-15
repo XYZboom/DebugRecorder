@@ -27,10 +27,11 @@ class DetectTransformer(
      */
     methods: Set<String>,
     args: Properties
-) : ClassFileTransformer {
+): ClassFileTransformer {
 
     private val classes: HashSet<String> = HashSet()
     private val methods: HashSet<String> = HashSet()
+    private val relevantClasses: Set<String> = classes
 
     /** Monitor only changed variables or not.
      * Note that all variables will be monitored when they come out for the first time.
@@ -110,7 +111,10 @@ class DetectTransformer(
             return null
         }
         val name = className.replace("/", ".")
-        if (classes.isNotEmpty() && name !in classes) {
+        if ((classes.isNotEmpty() && name !in classes) &&
+            // if relevant, monitor it also as a backup
+            (relevantClasses.isNotEmpty() && name !in relevantClasses)
+        ) {
             return null
         }
         println("Transforming class: $className")
@@ -144,9 +148,16 @@ class DetectTransformer(
     }
 
     private fun transformMethod(methodNode: MethodNode, owner: String) {
-        if (methods.isNotEmpty() &&
-            "${owner.replace("/", ".")}::${methodNode.name}" !in methods) {
-            return
+        // flag variable. if true, it means that current method is not user specified, but is a relevant from d4j.
+        val relevant = if (methods.isNotEmpty() &&
+            "${owner.replace("/", ".")}::${methodNode.name}" !in methods
+        ) {
+            if (relevantClasses.isEmpty()) {
+                return
+            }
+            true
+        } else {
+            false
         }
         if (methodNode.name == "<clinit>") {
             return
@@ -209,9 +220,9 @@ class DetectTransformer(
                             wroteOrFirstVisitVars.add(varNode)
                         }
                     }
-                    generateMonitorLocalVar(inst.line, wroteOrFirstVisitVars)
+                    generateMonitorLocalVar(inst.line, wroteOrFirstVisitVars, relevant)
                 } else {
-                    generateMonitorLocalVar(inst.line, availableVars.values)
+                    generateMonitorLocalVar(inst.line, availableVars.values, relevant)
                 }
                 if (inst.next is FrameNode) {
                     var insertBefore = inst.next
@@ -254,6 +265,7 @@ class DetectTransformer(
     private fun generateMonitorLocalVar(
         line: Int,
         visitedVars: Collection<LocalVariableNode>,
+        relevant: Boolean
     ): InsnList {
         val list = InsnList()
         if (visitedVars.isEmpty() || visitedVars.all { it.name == "this" }) {
@@ -301,11 +313,16 @@ class DetectTransformer(
             )
             list.add(InsnNode(POP))
         }
+        if (relevant) {
+            list.add(InsnNode(ICONST_1))
+        } else {
+            list.add(InsnNode(ICONST_0))
+        }
         list.add(
             MethodInsnNode(
                 AdviceAdapter.INVOKESTATIC, Type.getInternalName(DetectMonitor::class.java),
                 DetectMonitor::monitorLocalVar.name,
-                "(ILjava/util/HashMap;)V", false
+                "(ILjava/util/HashMap;Z)V", false
             )
         )
         return list

@@ -31,7 +31,7 @@ class DetectTransformer(
 
     private val classes: HashSet<String> = HashSet()
     private val methods: HashSet<String> = HashSet()
-    private val relevantClasses: Set<String> = classes
+    private val relevantClasses: Set<String> = classes.filter { it.isNotBlank() }.toSet()
 
     /** Monitor only changed variables or not.
      * Note that all variables will be monitored when they come out for the first time.
@@ -320,7 +320,7 @@ class DetectTransformer(
         }
         list.add(
             MethodInsnNode(
-                AdviceAdapter.INVOKESTATIC, Type.getInternalName(DetectMonitor::class.java),
+                INVOKESTATIC, Type.getInternalName(DetectMonitor::class.java),
                 DetectMonitor::monitorLocalVar.name,
                 "(ILjava/util/HashMap;Z)V", false
             )
